@@ -17,6 +17,7 @@
  */
 package com.steptron.medical.device.services;
 
+import java.util.Collection;
 import java.util.List;
 
 import javax.usb.UsbClaimException;
@@ -32,6 +33,8 @@ import javax.usb.UsbHub;
 import javax.usb.UsbInterface;
 import javax.usb.UsbPipe;
 import javax.usb.UsbServices;
+
+import org.usb4java.javax.DeviceNotFoundException;
 
 import com.steptron.medical.device.exception.DeviceConnectionException;
 
@@ -53,6 +56,8 @@ public abstract class USBService {
 
 	/** The Constant BYTE_ARRAY_LENGTH_128. */
 	public static final int BYTE_ARRAY_LENGTH_128 = 128;
+
+	public abstract Collection<?> getMeasurements(String user) throws DeviceNotFoundException, DeviceConnectionException, SecurityException, UsbException, InterruptedException;
 
 	/**
 	 * Initialise the device to start the serial communication.

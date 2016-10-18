@@ -33,10 +33,10 @@ import com.steptron.medical.device.domain.BM55User;
 /**
  * Tests the BM55 device interfaces and collects the measurements it has stored.
  */
+@SuppressWarnings("unchecked")
 public class TestBM55USBService {
 
-	private static final short VENDOR_ID = (short) 0x0c45;
-	private static final short PRODUCT_ID = (short) 0x7406;
+	private static final String USER = "A";
 	private USBService usbService = new BM55USBService();
 
 	/**
@@ -45,10 +45,19 @@ public class TestBM55USBService {
 	 * @throws Exception the exception
 	 */
 	@Test
-	public void testGetBM55Measurements() throws Exception {
-		BM55User readingsUser = BM55User.valueOf("A");
+	public void testGetBM55Measurements_with_getMeasurements() throws Exception {
+		List<BM55Measurement> measurements = (List<BM55Measurement>) usbService.getMeasurements(USER);
+		System.out.println("Number of readings:" + measurements.size() + "\n");
+		for(BM55Measurement bloodPressureMeasurement : measurements) {
+			System.out.println(bloodPressureMeasurement + "\n");
+		}
+	}
+
+	//@Test
+	public void testGetBM55Measurements_individual_method_calls() throws Exception {
+		BM55User readingsUser = BM55User.valueOf(USER);
 		List<BM55Measurement> measurements = new ArrayList<BM55Measurement>();
-		UsbDevice device = usbService.getUSBDevice(VENDOR_ID, PRODUCT_ID);
+		UsbDevice device = usbService.getUSBDevice(BM55USBService.VENDOR_ID, BM55USBService.PRODUCT_ID);
 
 		UsbPipe connectionPipe = usbService.getUSBConnection(device, 0, -127);
 		byte requestType = 33;

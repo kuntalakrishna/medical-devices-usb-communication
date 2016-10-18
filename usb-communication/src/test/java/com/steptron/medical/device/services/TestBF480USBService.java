@@ -34,13 +34,10 @@ import com.steptron.medical.device.util.BytesManipulator;
 /**
  * Tests the BF480 device interfaces and collects the measurements it has stored.
  */
+@SuppressWarnings("unchecked")
 public class TestBF480USBService {
 
-	private static final short VENDOR_ID = (short) 0x04d9;
-	private static final short PRODUCT_ID = (short) 0x8010;
-
-	private static final int USER_NUMBER = Integer.valueOf(1);
-	private static final int READING_START_BYTE_NUMBER = (USER_NUMBER - 1) * 6;
+	private static final String USER_NUMBER = "1";
 
 	private USBService usbService = new BF480USBService();
 
@@ -50,9 +47,19 @@ public class TestBF480USBService {
 	 * @throws Exception the exception
 	 */
 	@Test
-	public void testGetBF480Measurements() throws Exception {
+	public void testGetBF480Measurements_with_getMeasurements() throws Exception {
+		List<BF480Measurement> measurements = (List<BF480Measurement>) usbService.getMeasurements(USER_NUMBER);
+		System.out.println("Number of readings:" + measurements.size());
+		for(BF480Measurement measurement : measurements) {
+			System.out.println(measurement + "\n");
+		}
+	}
+
+	//@Test
+	public void testGetBF480Measurements_individual_method_calls() throws Exception {
+		int readingStartByteNumber = (Integer.valueOf(USER_NUMBER) - 1) * 6;
 		List<BF480Measurement> measurements = new ArrayList<BF480Measurement>();
-		UsbDevice device = usbService.getUSBDevice(VENDOR_ID, PRODUCT_ID);
+		UsbDevice device = usbService.getUSBDevice(BF480USBService.VENDOR_ID, BF480USBService.PRODUCT_ID);
 
 		UsbPipe connectionPipe = usbService.getUSBConnection(device, 0, -127);
 		byte requestType = 33;
@@ -82,10 +89,10 @@ public class TestBF480USBService {
 
 			//convert all 64 readings to an object by iterating over rows of the matrix
 			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
-				if(userReadings[readingsCounter][READING_START_BYTE_NUMBER + 4] == 0) {
+				if(userReadings[readingsCounter][readingStartByteNumber + 4] == 0) {
 					break;
 				}
-				measurements.add(new BF480Measurement(userReadings[readingsCounter], READING_START_BYTE_NUMBER));
+				measurements.add(new BF480Measurement(userReadings[readingsCounter], readingStartByteNumber));
 			}
 
 			Collections.sort(measurements);

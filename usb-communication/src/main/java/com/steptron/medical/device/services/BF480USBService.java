@@ -17,13 +17,22 @@
  */
 package com.steptron.medical.device.services;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
 import javax.usb.UsbControlIrp;
 import javax.usb.UsbDevice;
 import javax.usb.UsbException;
 import javax.usb.UsbIrp;
 import javax.usb.UsbPipe;
 
+import org.usb4java.javax.DeviceNotFoundException;
+
+import com.steptron.medical.device.domain.BF480Measurement;
 import com.steptron.medical.device.exception.DeviceConnectionException;
+import com.steptron.medical.device.util.BytesManipulator;
 
 /**
  * The Class BF480USBService extends an abstract class USBService.
@@ -33,8 +42,67 @@ import com.steptron.medical.device.exception.DeviceConnectionException;
  */
 public class BF480USBService extends USBService {
 
+	public static final short VENDOR_ID = (short) 0x04d9;
+	public static final short PRODUCT_ID = (short) 0x8010;
+
 	/** The Constant MAX_NUMBER_OF_READINGS represents that the beurer BF480 has maximum of 64 readings stored per user. */
 	public static final int MAX_NUMBER_OF_READINGS = 64;
+
+	@Override
+	public Collection<?> getMeasurements(String user) throws DeviceNotFoundException, DeviceConnectionException, SecurityException, UsbException {
+		int userNumber = Integer.valueOf(user);
+		int readingStartByteNumber = (userNumber - 1) * 6;
+
+		List<BF480Measurement> measurements = new ArrayList<BF480Measurement>();
+		UsbDevice device = getUSBDevice(VENDOR_ID, PRODUCT_ID);
+
+		UsbPipe connectionPipe = getUSBConnection(device, 0, -127);
+		byte requestType = 33;
+		byte request = 0x09;
+		short value = 521;
+		short index = 0;
+		UsbControlIrp usbControl = getUSBControl(device, requestType, request, value, index);
+		try {
+			connectionPipe.open();
+
+			initialiseDevice(device, usbControl, connectionPipe);
+
+			//Read 128 x 64 data from serial interface
+			byte[][] rawReadings = new byte[BF480USBService.MAX_NUMBER_OF_READINGS][BF480USBService.BYTE_ARRAY_LENGTH_128];
+			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
+				rawReadings[readingsCounter] = readData(connectionPipe, 128);
+			}
+
+			//Convert 128 x 64 data to 64 x 64
+			int[][] readings = new int[BF480USBService.MAX_NUMBER_OF_READINGS][BF480USBService.BYTE_ARRAY_LENGTH_128 / 2];
+			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
+				readings[readingsCounter] = BytesManipulator.convertBytesToIntegers(rawReadings[readingsCounter]);
+			}
+
+			//Transpose the data matrix to retrieve each patients information
+			int[][] userReadings = BytesManipulator.transpose(readings);
+
+			//convert all 64 readings to an object by iterating over rows of the matrix
+			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
+				if(userReadings[readingsCounter][readingStartByteNumber + 4] == 0) {
+					break;
+				}
+				measurements.add(new BF480Measurement(userReadings[readingsCounter], readingStartByteNumber));
+			}
+
+			Collections.sort(measurements);
+		} finally {
+			if(connectionPipe != null && connectionPipe.isOpen()) {
+				try {
+					connectionPipe.close();
+					connectionPipe.getUsbEndpoint().getUsbInterface().release();
+				} catch(UsbException e) {
+					//Do nothing
+				}
+			}
+		}
+		return measurements;
+	}
 
 	/* (non-Javadoc)
 	 * @see org.medipi.devices.drivers.service.USBService#initialiseDevice(javax.usb.UsbDevice, javax.usb.UsbControlIrp, javax.usb.UsbPipe)

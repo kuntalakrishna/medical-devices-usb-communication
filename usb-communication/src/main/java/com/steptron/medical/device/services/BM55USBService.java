@@ -17,7 +17,10 @@
  */
 package com.steptron.medical.device.services;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 
 import javax.usb.UsbControlIrp;
 import javax.usb.UsbDevice;
@@ -25,6 +28,10 @@ import javax.usb.UsbException;
 import javax.usb.UsbIrp;
 import javax.usb.UsbPipe;
 
+import org.usb4java.javax.DeviceNotFoundException;
+
+import com.steptron.medical.device.domain.BM55Measurement;
+import com.steptron.medical.device.domain.BM55User;
 import com.steptron.medical.device.exception.DeviceConnectionException;
 
 /**
@@ -34,6 +41,50 @@ import com.steptron.medical.device.exception.DeviceConnectionException;
  * and method to get the number of readings the device has stored.
  */
 public class BM55USBService extends USBService {
+
+	public static final short VENDOR_ID = (short) 0x0c45;
+	public static final short PRODUCT_ID = (short) 0x7406;
+
+	@Override
+	public Collection<?> getMeasurements(String user) throws DeviceNotFoundException, DeviceConnectionException, SecurityException, UsbException, InterruptedException {
+		BM55User readingsUser = BM55User.valueOf(user);
+		List<BM55Measurement> measurements = new ArrayList<BM55Measurement>();
+		UsbDevice device = getUSBDevice(VENDOR_ID, PRODUCT_ID);
+
+		UsbPipe connectionPipe = getUSBConnection(device, 0, -127);
+		byte requestType = 33;
+		byte request = 0x09;
+		short value = 521;
+		short index = 0;
+		UsbControlIrp usbControl = getUSBControl(device, requestType, request, value, index);
+		try {
+			connectionPipe.open();
+			initialiseDevice(device, usbControl, connectionPipe);
+			int numberOfReadings = getNumberOfReadings(device, usbControl, connectionPipe);
+
+			BM55Measurement measurement;
+			byte[] data;
+			for(int readingsCounter = 1; readingsCounter < numberOfReadings; readingsCounter++) {
+				writeDataToInterface(device, usbControl, new byte[] {(byte) 0xA3, (byte) readingsCounter}, BM55USBService.DEFAULT_BYTE_ARRAY_LENGTH_8, BM55USBService.PADDING_BYTE_0xF4);
+				data = readData(connectionPipe, 8);
+				measurement = new BM55Measurement(data);
+				if(measurement.getUser().equals(readingsUser)) {
+					measurements.add(new BM55Measurement(data));
+				}
+			}
+			terminateDeviceCommunication(device, usbControl, connectionPipe);
+		} finally {
+			if(connectionPipe != null && connectionPipe.isOpen()) {
+				try {
+					connectionPipe.close();
+					connectionPipe.getUsbEndpoint().getUsbInterface().release();
+				} catch(UsbException e) {
+					//Do nothing
+				}
+			}
+		}
+		return measurements;
+	}
 
 	/* (non-Javadoc)
 	 * @see org.medipi.devices.drivers.service.USBService#initialiseDevice(javax.usb.UsbDevice, javax.usb.UsbControlIrp, javax.usb.UsbPipe)

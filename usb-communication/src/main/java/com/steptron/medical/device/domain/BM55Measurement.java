@@ -59,49 +59,62 @@ public class BM55Measurement {
      * @param reading the reading bytes which will be converted to meaningful
      * values after decoding them
      */
-    public BM55Measurement(final byte[] reading) {
-        this.systolicPressure = BytesManipulator.getUnsignedInteger((byte) (reading[0] + 25));
-        this.diastolicPressure = BytesManipulator.getUnsignedInteger((byte) (reading[1] + 25));
-        this.pulseRate = BytesManipulator.getUnsignedInteger(reading[2]);
-        int day = 0;
-        int month = 0;
-        int year = 0;
-        int hour = 0;
-        int minute = 0;
+	public BM55Measurement(final byte[] reading) {
+		//Systolic pressure is byte[0] + 25
+		this.systolicPressure = BytesManipulator.getUnsignedInteger((byte) (reading[0] + 25));
 
-        if (reading[3] < 0) {
-            this.restingIndicator = true;
-            month = reading[3] + 128;
-        } else {
-            month = reading[3];
-        }
+		//Diastolic pressure is byte[0] + 25
+		this.diastolicPressure = BytesManipulator.getUnsignedInteger((byte) (reading[1] + 25));
 
-        if (reading[4] < 0) {
-            this.user = BM55User.B;
-            day = reading[4] + 128;
-        } else {
-            this.user = BM55User.A;
-            day = reading[4];
-        }
+		//Pulse rate is byte[2]
+		this.pulseRate = BytesManipulator.getUnsignedInteger(reading[2]);
 
-        hour = reading[5];
-        minute = reading[6];
+		int day = 0;
+		int month = 0;
+		int year = 0;
+		int hour = 0;
+		int minute = 0;
 
-        if (reading[7] < 0) {
-            this.arrhythmia = true;
-            year = reading[7] + 128 + 2000;
-        } else {
-            year = reading[7] + 2000;
-        }
+		//if byte[3] < 0 then the resting indicator is on and the measured month would be byte[3] + 128
+		if(reading[3] < 0) {
+			this.restingIndicator = true;
+			month = reading[3] + 128;
+		} else {
+			month = reading[3];
+		}
 
-        try {
-            ZonedDateTime zdt = LocalDateTime.of(year, month, day, hour, minute).atZone(ZoneId.of("Z"));
-            this.measuredTime = zdt.toInstant();
+		//if byte[4] < 0 then B is the user for which the measurement was taken and the measured day would be byte[4] + 128
+		//else the measurement taken was for user A and measured day would be byte[4]
+		if(reading[4] < 0) {
+			this.user = BM55User.B;
+			day = reading[4] + 128;
+		} else {
+			this.user = BM55User.A;
+			day = reading[4];
+		}
 
-        } catch (final Exception e) {
-            e.printStackTrace();
-        }
-    }
+		//Hour and minutes are in simple representation of byte[5] and byte[6] respectively
+		hour = reading[5];
+		minute = reading[6];
+
+		//if byte[7] < 0 then the arrhythmia indicator is on and the measured year would be byte[7] + 2000 + 128
+		//else the arrhythmia indicator is off and the measured year would be byte[7] + 2000
+		if(reading[7] < 0) {
+			this.arrhythmia = true;
+			year = reading[7] + 128 + 2000;
+		} else {
+			year = reading[7] + 2000;
+		}
+
+		//Convert the yyyy-mm-dd HH:mm to ZonedDateTime or you can convert this to simple java.util.Date or java.sql.Timestamp
+		try {
+			ZonedDateTime zdt = LocalDateTime.of(year, month, day, hour, minute).atZone(ZoneId.of("Z"));
+			this.measuredTime = zdt.toInstant();
+
+		} catch(final Exception e) {
+			e.printStackTrace();
+		}
+	}
 
     /**
      * Method to get the systolic pressure.

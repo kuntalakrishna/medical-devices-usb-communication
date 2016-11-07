@@ -50,29 +50,44 @@ public class BF480USBService extends USBService {
 
 	@Override
 	public Collection<?> getMeasurements(String user) throws DeviceNotFoundException, DeviceConnectionException, SecurityException, UsbException {
+		//User number (1 to 10) for which readings needs to be transferred
 		int userNumber = Integer.valueOf(user);
+
+		//This variable will be used to identify starting point in a transposed array for the given user
 		int readingStartByteNumber = (userNumber - 1) * 6;
 
+		//Find Beurer BM55 USB device with VENDOR_ID = (short) 0x04d9 and PRODUCT_ID = (short) 0x8010
 		List<BF480Measurement> measurements = new ArrayList<BF480Measurement>();
 		UsbDevice device = getUSBDevice(VENDOR_ID, PRODUCT_ID);
 
+		//Get USB connection with interface number 0 and endpoint number -127
 		UsbPipe connectionPipe = getUSBConnection(device, 0, -127);
 		byte requestType = 33;
 		byte request = 0x09;
 		short value = 521;
 		short index = 0;
+
+		//Get usbControl with the above specified parameter. This object is needed to send data to the USB device
 		UsbControlIrp usbControl = getUSBControl(device, requestType, request, value, index);
 		try {
+
+			//Open the USB communication
 			connectionPipe.open();
 
+			//prepare the device to communicate over the USB by writing {0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} byte array to device.
+			//Read the data available on read port after writing data to the USB device.
 			initialiseDevice(device, usbControl, connectionPipe);
 
+			//No need to get number of readings as maximum number of readings for this device are 64
+
+			//Read the data from USB device by iterating 64 times and collect the readings in 128 byte array
 			//Read 128 x 64 data from serial interface
 			byte[][] rawReadings = new byte[BF480USBService.MAX_NUMBER_OF_READINGS][BF480USBService.BYTE_ARRAY_LENGTH_128];
 			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
 				rawReadings[readingsCounter] = readData(connectionPipe, 128);
 			}
 
+			//Each value is represented with 2 adjacent bytes. Convert 2 adjacent bytes to one integer. e.g. [W0, W0, W1, W1,...W59,W59] will be converted to [W0,W1,... W59]
 			//Convert 128 x 64 data to 64 x 64
 			int[][] readings = new int[BF480USBService.MAX_NUMBER_OF_READINGS][BF480USBService.BYTE_ARRAY_LENGTH_128 / 2];
 			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
@@ -82,16 +97,22 @@ public class BF480USBService extends USBService {
 			//Transpose the data matrix to retrieve each patients information
 			int[][] userReadings = BytesManipulator.transpose(readings);
 
+
 			//convert all 64 readings to an object by iterating over rows of the matrix
 			for(int readingsCounter = 0; readingsCounter < BF480USBService.MAX_NUMBER_OF_READINGS; readingsCounter++) {
 				if(userReadings[readingsCounter][readingStartByteNumber + 4] == 0) {
+					//break when it is indicated that there are no more readings available
 					break;
 				}
+				//Pass the transposed byte array along with starting position for the give user to BF480Measurement constructor which will decode the byte array to different parameters of selected measurement.
 				measurements.add(new BF480Measurement(userReadings[readingsCounter], readingStartByteNumber));
 			}
+			//No need to terminate the device communication for BF480
 
+			//Sort the readings according to measured time
 			Collections.sort(measurements);
 		} finally {
+			//Close the USB device communication
 			if(connectionPipe != null && connectionPipe.isOpen()) {
 				try {
 					connectionPipe.close();

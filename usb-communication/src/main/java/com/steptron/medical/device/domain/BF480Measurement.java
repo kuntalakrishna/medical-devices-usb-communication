@@ -61,28 +61,48 @@ public class BF480Measurement implements Comparable<BF480Measurement> {
      * reading will start. First 0 to 5 integers belongs to user 1, 6 to 11
      * belongs to user 2 and so on
      */
-    public BF480Measurement(final int[] reading, final int readingStartByteNumber) {
-        final int date = reading[readingStartByteNumber + 4];
-        final int time = reading[readingStartByteNumber + 5];
-        final int year = 1920 + (date >> 9);
-        final int month = date >> 5 & 0xf;
-        final int day = date & 0x1f;
+	public BF480Measurement(final int[] reading, final int readingStartByteNumber) {
 
-        final int hour = time >> 8;
-        final int minute = time & 0xff;
+		//Representation of transposed row passed to this constructor
+		//startingbyte=0 |startingbyte=6 |        |startingbyte=54
+		//[        User 1        |         User 2        |               |        User 10        ]
+		//[W0, B0, w0, M0, D0, T0, W0, B0, w0, M0, D0, T0, . . …………………….., W0, B0, w0, M0, D0, T0]
 
-        try {
-            ZonedDateTime zdt = LocalDateTime.of(year, month, day, hour, minute).atZone(ZoneId.of("Z"));
-            this.measuredTime = zdt.toInstant();
-        } catch (final Exception e) {
-            e.printStackTrace();
-        }
+		//Measurement timestamp conversion :START
+		final int date = reading[readingStartByteNumber + 4];
+		final int time = reading[readingStartByteNumber + 5];
 
-        this.weight = Double.valueOf(reading[readingStartByteNumber + 0]) / 10;
-        this.bodyFat = Double.valueOf(reading[readingStartByteNumber + 1]) / 10;
-        this.water = Double.valueOf(reading[readingStartByteNumber + 2]) / 10;
-        this.muscles = Double.valueOf(reading[readingStartByteNumber + 3]) / 10;
-    }
+		//Calculate the year by right shifting date by 9 + 1920
+		final int year = 1920 + (date >> 9);
+
+		//Calculate the month by right shifting date by 5 & 0xf
+		final int month = date >> 5 & 0xf;
+
+		//Calculate the day by date & 0x1f
+		final int day = date & 0x1f;
+
+		//Calculate the hour by right shifting time by 8
+		final int hour = time >> 8;
+
+		//Calculate the minute by time & 0xff
+		final int minute = time & 0xff;
+
+		//Convert the yyyy-mm-dd HH:mm to ZonedDateTime or you can convert this to simple java.util.Date or java.sql.Timestamp
+		try {
+			ZonedDateTime zdt = LocalDateTime.of(year, month, day, hour, minute).atZone(ZoneId.of("Z"));
+			this.measuredTime = zdt.toInstant();
+		} catch(final Exception e) {
+			e.printStackTrace();
+		}
+
+		//Measurement timestamp conversion :END
+
+		//Assign double values to weight, body fat %, water % and muscle %
+		this.weight = Double.valueOf(reading[readingStartByteNumber + 0]) / 10;
+		this.bodyFat = Double.valueOf(reading[readingStartByteNumber + 1]) / 10;
+		this.water = Double.valueOf(reading[readingStartByteNumber + 2]) / 10;
+		this.muscles = Double.valueOf(reading[readingStartByteNumber + 3]) / 10;
+	}
 
     /**
      * Method to get the weight.

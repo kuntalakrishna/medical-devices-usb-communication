@@ -47,33 +47,59 @@ public class BM55USBService extends USBService {
 
 	@Override
 	public Collection<?> getMeasurements(String user) throws DeviceNotFoundException, DeviceConnectionException, SecurityException, UsbException, InterruptedException {
+		//User A or B for which readings needs to be transferred
 		BM55User readingsUser = BM55User.valueOf(user);
 		List<BM55Measurement> measurements = new ArrayList<BM55Measurement>();
+
+		//Find Beurer BM55 USB device with VENDOR_ID = (short) 0x0c45 and PRODUCT_ID = (short) 0x7406
 		UsbDevice device = getUSBDevice(VENDOR_ID, PRODUCT_ID);
 
+		//Get USB connection with interface number 0 and endpoint number -127
 		UsbPipe connectionPipe = getUSBConnection(device, 0, -127);
 		byte requestType = 33;
 		byte request = 0x09;
 		short value = 521;
 		short index = 0;
+
+		//Get usbControl with the above specified parameter. This object is needed to send data to the USB device
 		UsbControlIrp usbControl = getUSBControl(device, requestType, request, value, index);
 		try {
+
+			//Open the USB communication
 			connectionPipe.open();
+
+			//prepare the device to communicate over the USB by writing {0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} byte array to device.
+			//Read the data available on read port after writing data to the USB device.
 			initialiseDevice(device, usbControl, connectionPipe);
+
+			//Get the number of readings available in the device by writing {0xA2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} byte array to device.
+			//Read the data available on read port after writing data to the USB device. This read data represents number of readings available with the device irrespective of user A & B (It will return total readings of A+B).
 			int numberOfReadings = getNumberOfReadings(device, usbControl, connectionPipe);
 
 			BM55Measurement measurement;
 			byte[] data;
+
+			//Iterate for the numberOfReadings returned
 			for(int readingsCounter = 1; readingsCounter < numberOfReadings; readingsCounter++) {
+				//To get each reading write {0xA3, (byte) readingsCounter, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} byte to device.
 				writeDataToInterface(device, usbControl, new byte[] {(byte) 0xA3, (byte) readingsCounter}, BM55USBService.DEFAULT_BYTE_ARRAY_LENGTH_8, BM55USBService.PADDING_BYTE_0xF4);
+
+				//Read the data available on read port after writing above data to the USB device. This read data represents the byte array of {readingCounter} measurement stored in the device.
 				data = readData(connectionPipe, 8);
+
+				//Pass the received byte array to BM55Measurement constructor which will decode the byte array to different attributes.
 				measurement = new BM55Measurement(data);
+
+				//Add this measurement to the list only if the user passed to this method matches with decoded BM55Measurement user attribute.
 				if(measurement.getUser().equals(readingsUser)) {
 					measurements.add(new BM55Measurement(data));
 				}
 			}
+
+			//Once all the measurements are captured, terminate the device communication by writing {0xF7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} byte array to device.
 			terminateDeviceCommunication(device, usbControl, connectionPipe);
 		} finally {
+			//Close the USB device communication
 			if(connectionPipe != null && connectionPipe.isOpen()) {
 				try {
 					connectionPipe.close();
